@@ -14,19 +14,55 @@ st.set_page_config(page_title="Personal Finance Tracker", page_icon="💰", layo
 # --- Custom CSS ---
 st.markdown("""
     <style>
-    /* Remove hardcoded backgrounds to support Dark Mode */
-    .stMetric {
-        padding: 15px;
+    /* Metrics Cards */
+    div[data-testid="stMetric"] {
+        background-color: var(--secondary-background-color);
+        padding: 20px;
         border-radius: 10px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        border: 1px solid rgba(128, 128, 128, 0.2);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-left: 5px solid #38b2ac;
+        transition: transform 0.2s;
     }
+    div[data-testid="stMetric"]:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 6px 8px rgba(0, 0, 0, 0.2);
+    }
+    div[data-testid="stMetric"] label {
+        color: var(--text-color);
+        opacity: 0.8;
+    }
+    
+    /* Insight Box */
     .insight-box {
         padding: 15px;
-        border-radius: 5px;
+        border-radius: 8px;
         margin-bottom: 10px;
-        border-left: 5px solid #38b2ac;
-        background-color: rgba(56, 178, 172, 0.1); /* Semi-transparent teal */
+        background-color: var(--secondary-background-color);
+        border-left: 5px solid #ecc94b;
+        color: var(--text-color);
+        font-size: 0.95rem;
+    }
+    
+    /* Buttons */
+    div.stButton > button {
+        background-color: #38b2ac;
+        color: white;
+        border-radius: 8px;
+        border: none;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    div.stButton > button:hover {
+        background-color: #319795;
+        border-color: #319795;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    /* Headers */
+    h1, h2, h3 {
+        color: #38b2ac !important;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -94,24 +130,40 @@ if page == "Dashboard":
         with c1:
             st.markdown("### Category Breakdown")
             category_group = monthly_df.groupby('category')['amount'].sum().reset_index()
-            fig_pie = px.pie(category_group, values='amount', names='category', hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
-            fig_pie.update_layout(margin=dict(t=0, b=0, l=0, r=0))
+            # Enhanced Pie Chart
+            fig_pie = px.pie(category_group, values='amount', names='category', hole=0.5, 
+                             color_discrete_sequence=px.colors.qualitative.Pastel)
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+            fig_pie.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), 
+                                  paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig_pie, use_container_width=True)
             
         with c2:
             st.markdown("### Daily Trend")
             daily_trend = monthly_df.groupby(monthly_df['txn_date'].dt.day)['amount'].sum().reset_index()
-            fig_line = px.line(daily_trend, x='txn_date', y='amount', markers=True, line_shape='spline')
-            fig_line.update_traces(line_color='#38b2ac')
-            fig_line.update_layout(margin=dict(t=20, b=20, l=20, r=20), xaxis_title="Day of Month", yaxis_title="Amount")
+            # Enhanced Line Chart
+            fig_line = px.line(daily_trend, x='txn_date', y='amount', markers=True)
+            fig_line.update_traces(line_color='#38b2ac', line_width=3, marker_size=8)
+            fig_line.update_layout(
+                margin=dict(t=20, b=20, l=20, r=20), 
+                xaxis_title="Day of Month", 
+                yaxis_title="Amount (₹)",
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=True, gridcolor='#4a5568')
+            )
             st.plotly_chart(fig_line, use_container_width=True)
 
 # --- Add Transaction Page ---
 elif page == "Add Transaction":
     st.title("➕ Add New Transaction")
     
-    with st.container():
-        st.markdown("### Manual Entry")
+    tab1, tab2 = st.tabs(["📝 Manual Entry", "📂 Bulk Upload"])
+    
+    # --- Tab 1: Manual Entry ---
+    with tab1:
+        st.markdown("### Enter Transaction Details")
         with st.form("transaction_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
@@ -130,54 +182,55 @@ elif page == "Add Transaction":
                 else:
                     st.error("Please enter valid description and amount.")
 
-    st.markdown("---")
-    st.markdown("### 📂 Bulk Upload")
-    uploaded_file = st.file_uploader("Upload CSV (Date, Description, Amount)", type=["csv"])
-    if uploaded_file:
-        try:
-            csv_df = pd.read_csv(uploaded_file)
-            st.dataframe(csv_df.head(), use_container_width=True)
-            
-            # Column Validation
-            required_cols = ['Date', 'Description', 'Amount']
-            missing_cols = [col for col in required_cols if col not in csv_df.columns]
-            
-            if missing_cols:
-                st.error(f"❌ Missing columns: {', '.join(missing_cols)}. Please check your CSV.")
-            else:
-                if st.button("Import Data", type="primary"):
-                    count = 0
-                    errors = 0
-                    for _, row in csv_df.iterrows():
-                        try:
-                            # Robust Date Parsing
-                            raw_date = str(row['Date'])
+    # --- Tab 2: Bulk Upload ---
+    with tab2:
+        st.markdown("### Upload CSV File")
+        uploaded_file = st.file_uploader("Format: Date, Description, Amount", type=["csv"])
+        if uploaded_file:
+            try:
+                csv_df = pd.read_csv(uploaded_file)
+                st.dataframe(csv_df.head(), use_container_width=True)
+                
+                # Column Validation
+                required_cols = ['Date', 'Description', 'Amount']
+                missing_cols = [col for col in required_cols if col not in csv_df.columns]
+                
+                if missing_cols:
+                    st.error(f"❌ Missing columns: {', '.join(missing_cols)}. Please check your CSV.")
+                else:
+                    if st.button("Import Data", type="primary"):
+                        count = 0
+                        errors = 0
+                        for _, row in csv_df.iterrows():
                             try:
-                                d = pd.to_datetime(raw_date, dayfirst=True).strftime('%Y-%m-%d')
-                            except:
-                                d = datetime.today().strftime('%Y-%m-%d') # Fallback
-                            
-                            desc = str(row['Description'])
-                            
-                            # Clean Amount (remove currency symbols, commas)
-                            raw_amount = str(row['Amount'])
-                            clean_amount = raw_amount.replace('₹', '').replace('$', '').replace(',', '').strip()
-                            amt = float(clean_amount)
-                            
-                            cat = categorize_transaction(desc)
-                            add_transaction(d, desc, amt, cat)
-                            count += 1
-                        except Exception as e:
-                            errors += 1
-                            continue
-                    
-                    if count > 0:
-                        st.success(f"✅ Successfully imported {count} transactions!")
-                    if errors > 0:
-                        st.warning(f"⚠️ Skipped {errors} rows due to errors.")
+                                # Robust Date Parsing
+                                raw_date = str(row['Date'])
+                                try:
+                                    d = pd.to_datetime(raw_date, dayfirst=True).strftime('%Y-%m-%d')
+                                except:
+                                    d = datetime.today().strftime('%Y-%m-%d') # Fallback
+                                
+                                desc = str(row['Description'])
+                                
+                                # Clean Amount (remove currency symbols, commas)
+                                raw_amount = str(row['Amount'])
+                                clean_amount = raw_amount.replace('₹', '').replace('$', '').replace(',', '').strip()
+                                amt = float(clean_amount)
+                                
+                                cat = categorize_transaction(desc)
+                                add_transaction(d, desc, amt, cat)
+                                count += 1
+                            except Exception as e:
+                                errors += 1
+                                continue
                         
-        except Exception as e:
-            st.error(f"Error reading CSV: {e}")
+                        if count > 0:
+                            st.success(f"✅ Successfully imported {count} transactions!")
+                        if errors > 0:
+                            st.warning(f"⚠️ Skipped {errors} rows due to errors.")
+                            
+            except Exception as e:
+                st.error(f"Error reading CSV: {e}")
 
 # --- Manage Budgets Page ---
 elif page == "Manage Budgets":
